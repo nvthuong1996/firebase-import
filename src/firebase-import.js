@@ -246,47 +246,52 @@ function ChunkUploader(chunks) {
   }
 }
 
-ChunkUploader.prototype.go = function(onComplete) {
+ChunkUploader.prototype.go =async function(onComplete) {
   this.onComplete = onComplete;
 
   for(var i = 0; i < OUTSTANDING_WRITE_COUNT && i < this.chunks.length; i++) {
-    this.uploadNext();
+    await this.uploadNext();
   }
 };
 
 ChunkUploader.prototype.uploadNext = function() {
-  var chunkNum = this.next, chunk = this.chunks[chunkNum];
-  assert(chunkNum < this.chunks.length);
-  this.next++;
-
-  var self = this;
-  var onComplete = function(error) {
-    if (error) {
-      console.log('Error uploading to ' + self.chunks[i].ref.toString() + ': ' + util.inspect(json));
-      console.error(error);
-      throw error;
-    }
-
-    if (process.stdout.isTTY && self.bar) {
-        self.bar.tick();
-    }
-
-    if (chunkNum === self.chunks.length - 1) {
-      self.onComplete();
+  var selff = this;
+  return new Promise((resolve,reject)=>{
+    var chunkNum = selff.next, chunk = selff.chunks[chunkNum];
+    assert(chunkNum < selff.chunks.length);
+    selff.next++;
+  
+    var self = selff;
+    var onComplete = function(error) {
+      if (error) {
+        console.log('Error uploading to ' + self.chunks[i].ref.toString() + ': ' + util.inspect(json));
+        console.error(error);
+        return reject(error);
+      }
+  
+      if (process.stdout.isTTY && self.bar) {
+          self.bar.tick();
+      }
+  
+      if (chunkNum === self.chunks.length - 1) {
+        resolve();
+        self.onComplete();
+      } else {
+        // upload next chunk.
+        //assert(self.next === self.chunks.length || self.next === chunkNum + OUTSTANDING_WRITE_COUNT);
+        if (self.next < self.chunks.length)
+          self.uploadNext();
+      }
+    };
+  
+    if ('json' in chunk) {
+      chunk.ref.set(chunk.json, onComplete);
     } else {
-      // upload next chunk.
-      assert(self.next === self.chunks.length || self.next === chunkNum + OUTSTANDING_WRITE_COUNT);
-      if (self.next < self.chunks.length)
-        self.uploadNext();
+      assert('priority' in chunk)
+      chunk.ref.setPriority(chunk.priority, onComplete);
     }
-  };
-
-  if ('json' in chunk) {
-    chunk.ref.set(chunk.json, onComplete);
-  } else {
-    assert('priority' in chunk)
-    chunk.ref.setPriority(chunk.priority, onComplete);
-  }
+  })
+  
 }
 
 main();
